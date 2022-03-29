@@ -418,7 +418,7 @@ int shmget(key_t key, size_t size, int shmflg){
 //we get shmid from shmget
 //attaches memory segment identified by shmid to the address space of process
 //shmaddr provides this address:if null suitable unused address attached
-                               //if not null attach occurs to address equal to shmaddr
+                               //else if null attach occurs to address equal to shmaddr
 void *shmat(int shmid, const void *shmaddr, int shmflg){
 return;
 }
