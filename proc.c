@@ -532,4 +532,3 @@ procdump(void)
     cprintf("\n");
   }
 }
-//struct
