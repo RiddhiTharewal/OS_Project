@@ -415,7 +415,7 @@ int shmget(key_t key, size_t size, int shmflg){
 }
 
 //shmat
-//we get shmid from shmget 
+//we get shmid from shmget
 //attaches memory segment identified by shmid to the address space of process
 //shmaddr provides this address:if null suitable unused address attached
                                //if not null attach occurs to address equal to shmaddr

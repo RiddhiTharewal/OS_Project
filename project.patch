@@ -1,0 +1,53 @@
+diff --git a/vm.c b/vm.c
+index 7134cff..f94d6b2 100644
+--- a/vm.c
++++ b/vm.c
+@@ -392,3 +392,48 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
+ //PAGEBREAK!
+ // Blank page.
+ 
++
++
++
++//Shared Memory functions
++
++//creating a structure of shared memory region which contains: key,shmid,size,address,etc
++
++//create a structure of shared memory table array of shared memory regions
++
++
++
++//shmget
++//Flags:IPC_CREAT creates a new segment of the given size which is rounded off to a multiple of page size and assigns a key to the segment which can used later as a identifier.
++        //IPC_EXCL creates if segment not present and gives error if present (something like already exits) and fails.
++
++//key is used as identifier
++
++
++int shmget(key_t key, size_t size, int shmflg){
++	return 0;
++}
++
++//shmat
++//we get shmid from shmget 
++//attaches memory segment identified by shmid to the address space of process
++//shmaddr provides this address:if null suitable unused address attached
++                               //if not null attach occurs to address equal to shmaddr
++void *shmat(int shmid, const void *shmaddr, int shmflg){
++return;
++}
++
++//shmdt
++//detaches the shared memory located  at the address specified by shmaddr
++int shmdt(const void *shmaddr){
++return 0;
++}
++
++//shmctl
++//controls the shared memory region corresponding to shmid
++//cmd: IPC_STAT, IPC_SET, IPC_RMID
++//IPC_RMID: destroy segment only after last process detaches it
++int shmctl(int shmid, int cmd, struct shmid_ds *buf){
++return 0;
++}
++
