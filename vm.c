@@ -10,6 +10,24 @@
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
+
+#define 
+//shared memory Structures
+struct shmpage{
+	int key;
+	int size;
+	int shmid;
+	char *phy_addr;
+	int number_of_attaches;
+};
+
+struct shmtable{
+	struct spinlock lock;
+	struct shmpage pages[32];
+};
+
+
+
 // Set up CPU's kernel segment descriptors.
 // Run once on entry on each CPU.
 void
@@ -393,6 +411,16 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 // Blank page.
 
 
+void shminit(void){
+	struct shmpage *page;
+	acquire(&shmtable.lock);
+	for(page= shmtable.pages;page<&shmtable.pages[32];page++){
+		page->phy_addr = 0;
+		page->number_of_attaches = 0;
+	}
+	release(&shmtable.lock);
+	cprintf("Initialized shared memory table");
+}
 
 
 //Shared Memory functions
@@ -410,7 +438,21 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 //key is used as identifier
 
 
-int shmget(key_t key, size_t size, int shmflg){
+int shmget(int key, uint size, int shmflg){
+	acquire(&shmtable.lock);
+	
+	if(size <= 0){
+		release(&shmtable.lock);
+		return -1;
+	}
+
+	int pages_required = size/PGSIZE + 1;
+
+	if(pages_required>32){
+		release(&shmtable.lock);
+		return -1;
+	}
+	 
 	return 0;
 }
 
