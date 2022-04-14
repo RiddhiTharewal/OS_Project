@@ -7,24 +7,30 @@
 #include "proc.h"
 #include "elf.h"
 
+#include "shmem.h"
+#include "spinlock.h"
+
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
 
 
-#define 
 //shared memory Structures
 struct shmpage{
 	int key;
-	int size;
+	int no_of_pages;
 	int shmid;
-	char *phy_addr;
+	char *phy_addr[32];
+	int permission;
+	uint size;
+	int shm_cpid;
+	int shm_lpid;
 	int number_of_attaches;
 };
 
 struct shmtable{
 	struct spinlock lock;
 	struct shmpage pages[32];
-};
+}shmtable;
 
 
 
@@ -413,13 +419,24 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 void shminit(void){
 	struct shmpage *page;
+	initlock(&shmtable.lock,"Shared Memory");
 	acquire(&shmtable.lock);
 	for(page= shmtable.pages;page<&shmtable.pages[32];page++){
-		page->phy_addr = 0;
+		page->key = -1;
+		page->no_of_pages = 0;
+		page->shmid = 0;
+		for(int i = 0;i<32;i++){
+			page->phy_addr[i] = (char*)0;
+		}
+		page->permission = 0;
+		page->size = 0;
+		page->shm_cpid = -1;
+		page->shm_lpid = -1;
 		page->number_of_attaches = 0;
 	}
 	release(&shmtable.lock);
 	cprintf("Initialized shared memory table");
+
 }
 
 
@@ -438,24 +455,93 @@ void shminit(void){
 //key is used as identifier
 
 
+int check_keystatus(int key,int shmflg,int pages_required){
+	for(int i = 0; i<32 ; i++){
+			if(shmtable.pages[i].key == key){
+				if(shmflg == (IPC_CREAT | IPC_EXCL)){
+					return -1;
+				}
+				if(shmtable.pages[i].size != pages_required){
+					return -1;
+				}
+				if(shmtable.pages[i].permission == shm_rd || shmtable.pages[i].permission == shm_rdwr){
+					if(shmflg == 0 && key!=IPC_PRIVATE)
+						return shmtable.pages[i].shmid;
+					if(shmflg == IPC_CREAT)
+						return shmtable.pages[i].shmid;
+				}
+				return -1;
+			}
+	}
+	return 0;
+}
+
+
 int shmget(int key, uint size, int shmflg){
 	acquire(&shmtable.lock);
-	
 	if(size <= 0){
 		release(&shmtable.lock);
 		return -1;
 	}
 
+	int perm = 0;
+	if((shmflg & 3) == (int)shm_rd){
+		perm = shm_rd;
+		shmflg = shmflg^shm_rd;
+	}
+	else if((shmflg & 3) == shm_rdwr){
+		perm = shm_rdwr;
+		shmflg = shmflg^shm_rdwr;
+	}
+	else if((shmflg!=0) || (key == IPC_PRIVATE)){
+		release(&shmtable.lock);
+		return -1;
+	}
 	int pages_required = size/PGSIZE + 1;
 
 	if(pages_required>32){
 		release(&shmtable.lock);
 		return -1;
 	}
-	 
-	return 0;
-}
+	int j = check_keystatus(key,shmflg,pages_required);
+	if(j == -1){
+		release(&shmtable.lock);
+		return -1;
+	}
+	int i;
+	for(i=0 ; i<32 ; i++)
+		if(shmtable.pages[i].key == -1)
+			break;
+	if(i == 32){
+		release(&shmtable.lock);
+		return -1;
+	}
 
+	if((key!=IPC_PRIVATE) && (shmflg == IPC_CREAT) && (shmflg != (IPC_CREAT | IPC_EXCL))){
+		release(&shmtable.lock);
+		return -1;
+	}
+	for(int k = 0; k < pages_required; k++){
+		char* getregion = kalloc();
+		if(getregion == 0){
+			release(&shmtable.lock);
+			return -1;
+		}
+		memset(getregion, 0, PGSIZE);
+		shmtable.pages[i].phy_addr[k] = (char*)V2P(getregion);
+	}
+
+	shmtable.pages[i].size = pages_required;
+	shmtable.pages[i].key = key;
+	shmtable.pages[i].size = size;
+	shmtable.pages[i].permission = perm;
+	shmtable.pages[i].shmid = i;
+	shmtable.pages[i].shm_cpid = myproc()->pid;
+	release(&shmtable.lock);
+
+	return i;	//shmid
+}
+/*
 //shmat
 //we get shmid from shmget
 //attaches memory segment identified by shmid to the address space of process
@@ -477,5 +563,5 @@ return 0;
 //IPC_RMID: destroy segment only after last process detaches it
 int shmctl(int shmid, int cmd, struct shmid_ds *buf){
 return 0;
-}
+}*/
 
