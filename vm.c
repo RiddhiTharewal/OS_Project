@@ -541,16 +541,80 @@ int shmget(int key, uint size, int shmflg){
 
 	return i;	//shmid
 }
-/*
+
+int getindex(struct proc* p, void* cva){
+	void* lva = (void*)(KERNBASE-1);
+	int i;
+	for(i = 0; i < 32; i++){
+		if(p->pages[i].key != -1 && (uint)p->pages[i].virtualAddr >= (uint)cva && (uint)lva >= (uint)p->pages[i].virtualAddr) {
+			lva = p->pages[i].virtualAddr;
+		}
+	}
+	if(i == 32)
+		return -1;
+	return i;
+}
 //shmat
 //we get shmid from shmget
 //attaches memory segment identified by shmid to the address space of process
 //shmaddr provides this address:if null suitable unused address attached
                                //else if null attach occurs to address equal to shmaddr
 void *shmat(int shmid, const void *shmaddr, int shmflg){
-return;
+	acquire(&shmtable.lock);
+	int k = shmtable.pages[shmid].shmid;
+	if((shmid < 0 || shmid>32) || (k == -1)){
+		release(&shmtable.lock);
+		return (void*)-1;
+	}
+	void* va = (void*)MAXHEAP;
+	void* lva;
+	int index = 0;
+	uint remainder = ((uint)shmaddr -((uint)shmaddr %SHMLBA));	//check
+	struct proc *process = myproc();
+	if(shmaddr == (void*)0){
+		for(int i = 0; i < 32; i++){
+			index = getindex(process, va);
+			if(index != -1){
+				lva = process->pages[index].virtualAddr;
+				if((uint)va + shmtable.pages[k].no_of_pages*PGSIZE <=  (uint)lva)
+					break;
+				else
+					va = (void*)((uint)lva + process->pages[index].no_of_pages*PGSIZE);
+			} else
+				break;
+		}
+	}
+	else if((shmaddr != (void*)0) && ((shmaddr >= (void*)KERNBASE) || shmaddr < (void*)MAXHEAP)){
+		release(&shmtable.lock);
+		return (void*)-1;
+	}
+	else if((shmaddr != (void*)0) && ((shmflg & SHM_RND) != 0)){
+		if(!remainder){
+			release(&shmtable.lock);
+			return (void*)-1;
+		}
+		va = (void*)remainder;
+	}
+	else if((shmaddr != (void*)0) && ((shmflg & SHM_RND) == 0)){
+		if(remainder == (uint)shmaddr){
+			va = (void*)shmaddr;
+		}
+	}
+	int pflag;
+	if(((shmflg & SHM_RDONLY)!=0) && (shmtable.pages[shmid].permission == shm_rd)){
+		pflag = PTE_U;
+	}
+	else if(((shmflg & SHM_RDONLY)==0) && (shmtable.pages[shmid].permission == shm_rdwr)){
+		pflag = PTE_W | PTE_U;
+	}
+	else{
+		release(&shmtable.lock);
+		return (void*)-1;
+	}
+	release(&shmtable.lock);
+	return va;
 }
-
+/*
 //shmdt
 //detaches the shared memory located  at the address specified by shmaddr
 int shmdt(const void *shmaddr){

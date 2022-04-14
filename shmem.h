@@ -11,4 +11,4 @@
 #define SHM_RDONLY 2000
 #define SHM_REMAP 3000
 #define SHMLBA PGSIZE
-
+#define SHM_RND 4000
