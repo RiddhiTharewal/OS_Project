@@ -89,3 +89,40 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+
+extern int shmget(int,uint,int);
+extern int shmdt(void*);
+extern void* shmat(int,void*,int);
+extern int shmctl(int,int,void*);
+
+int sys_shmget(void){
+	int key,size,shmflag;
+	if(argint(0,&key)<0)
+		return -1;
+	if(argint(1,&size)<0)
+		return -1;
+	if(argint(2,&shmflag)<0)
+		return -1;
+	return shmget((int)key,(uint)size,shmflag);
+}
+
+void* sys_shmat(void){
+	int shmid,shmflag;
+	int i;
+	if(argint(0,&shmid)<0)
+		return (void*)0;
+	if(argint(1,&i)<0)
+		return (void*)0;
+	if(argint(2,&shmflag)<0)
+		return (void*)0;
+	return shmat(shmid,(void*)i,shmflag);
+}
+
+int sys_shmctl(void){
+	return 0;
+}
+
+int sys_shmdt(void){
+	return 0;
+}

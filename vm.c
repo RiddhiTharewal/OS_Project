@@ -542,17 +542,21 @@ int shmget(int key, uint size, int shmflg){
 	return i;	//shmid
 }
 
-int getindex(struct proc* p, void* cva){
+/*int getindex(struct proc* p, void* cva){
 	void* lva = (void*)(KERNBASE-1);
 	int i;
 	for(i = 0; i < 32; i++){
-		if(p->pages[i].key != -1 && (uint)p->pages[i].virtualAddr >= (uint)cva && (uint)lva >= (uint)p->pages[i].virtualAddr) {
-			lva = p->pages[i].virtualAddr;
+		if(p->pages[i].key != -1 && (uint)p->pages[i].v_addr >= (uint)cva && (uint)lva >= (uint)p->pages[i].v_addr) {
+			lva = p->pages[i].v_addr;
 		}
 	}
 	if(i == 32)
 		return -1;
 	return i;
+}*/
+
+int shmdt(const void *shmaddr){
+return 0;
 }
 //shmat
 //we get shmid from shmget
@@ -567,15 +571,22 @@ void *shmat(int shmid, const void *shmaddr, int shmflg){
 		return (void*)-1;
 	}
 	void* va = (void*)MAXHEAP;
-	void* lva;
-	int index = 0;
+	void* lva = (void*)(KERNBASE-1);
+	int index = -1;
 	uint remainder = ((uint)shmaddr -((uint)shmaddr %SHMLBA));	//check
 	struct proc *process = myproc();
 	if(shmaddr == (void*)0){
 		for(int i = 0; i < 32; i++){
-			index = getindex(process, va);
+			int j;
+			for(j = 0; j < 32; j++){
+				if(process->pages[j].key != -1 && (uint)process->pages[j].v_addr >= (uint)va && (uint)lva >= (uint)process->pages[j].v_addr){
+				lva = process->pages[j].v_addr;
+				index = j;
+				}
+			}
+
 			if(index != -1){
-				lva = process->pages[index].virtualAddr;
+				lva = process->pages[index].v_addr;
 				if((uint)va + shmtable.pages[k].no_of_pages*PGSIZE <=  (uint)lva)
 					break;
 				else
@@ -600,17 +611,88 @@ void *shmat(int shmid, const void *shmaddr, int shmflg){
 			va = (void*)shmaddr;
 		}
 	}
+
+	if((uint)va + shmtable.pages[k].no_of_pages*PGSIZE >= KERNBASE){
+		release(&shmtable.lock);
+		return (void*)-1;
+	}
+	index = -1;
+	for(int i = 0; i<32 ; i++){
+		if(process->pages[i].key != -1 && (uint)process->pages[i].v_addr + process->pages[i].no_of_pages*PGSIZE > (uint)va && (uint)va>=(uint)process->pages[i].v_addr){
+			index = i;
+			break;
+		}
+	}
+	uint size = 0;
+	if(index != -1){
+		if(shmflg & SHM_REMAP){
+			uint seg = (uint)process->pages[index].v_addr;
+			while(seg < (uint)va + shmtable.pages[k].no_of_pages*PGSIZE){
+				size = process->pages[index].no_of_pages;
+				if(shmdt((void*)seg) == -1){
+					release(&shmtable.lock);
+					return (void*)-1;
+				}
+				int j;
+				lva = (void*)(KERNBASE-1);
+				index = -1;
+				for(j = 0; j < 32; j++){
+					if(process->pages[j].key != -1 && (uint)process->pages[j].v_addr >= (uint)(seg+size*PGSIZE) && (uint)lva >= (uint)process->pages[j].v_addr){
+						lva = process->pages[j].v_addr;
+						index = j;
+					}
+				}
+				if(index == -1)
+					break;
+				seg = (uint)process->pages[index].v_addr;
+			}
+		}
+		else{
+			release(&shmtable.lock);
+			return (void*)-1;
+		}
+	}
+
 	int pflag;
-	if(((shmflg & SHM_RDONLY)!=0) && (shmtable.pages[shmid].permission == shm_rd)){
+	if(((shmflg & SHM_RDONLY)!=0) && (shmtable.pages[k].permission == shm_rd)){
 		pflag = PTE_U;
 	}
-	else if(((shmflg & SHM_RDONLY)==0) && (shmtable.pages[shmid].permission == shm_rdwr)){
+	else if(((shmflg & SHM_RDONLY)==0) && (shmtable.pages[k].permission == shm_rdwr)){
 		pflag = PTE_W | PTE_U;
 	}
 	else{
 		release(&shmtable.lock);
 		return (void*)-1;
 	}
+
+	for(int j = 0;j<shmtable.pages[index].no_of_pages;k++){
+		if(mappages(process->pgdir, (void*)((uint)va + (j*PGSIZE)), PGSIZE, (uint)shmtable.pages[k].phy_addr[j], pflag) < 0) {
+			deallocuvm(process->pgdir,(uint)va,(uint)(va + shmtable.pages[k].no_of_pages));
+			release(&shmtable.lock);
+			return (void*)-1;
+		}
+	}
+
+	index = -1;
+	for(int i = 0 ; i<32 ; i++){
+		if(process->pages[i].key == -1){
+			index = i;
+			break;
+		}
+	}
+
+	if(index == -1){
+		release(&shmtable.lock);
+		return (void*)-1;
+	}
+	process->pages[index].shmid = shmid;
+	process->pages[index].v_addr = va;
+	process->pages[index].key = shmtable.pages[k].key;
+	process->pages[index].no_of_pages = shmtable.pages[k].no_of_pages;
+	process->pages[index].permission = pflag;
+	shmtable.pages[k].number_of_attaches++;
+	shmtable.pages[k].shm_lpid = process->pid;
+
 	release(&shmtable.lock);
 	return va;
 }

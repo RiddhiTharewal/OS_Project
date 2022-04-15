@@ -112,6 +112,14 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  for(int j = 0 ; j<32 ; j++){
+	p->pages[j].key = -1;
+	p->pages[j].no_of_pages  = 0;
+	p->pages[j].shmid = -1;
+	p->pages[j].permission = PTE_W | PTE_U;
+	p->pages[j].v_addr = (char*)0;
+  }
+
   return p;
 }
 
