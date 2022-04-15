@@ -556,7 +556,53 @@ int shmget(int key, uint size, int shmflg){
 }*/
 
 int shmdt(const void *shmaddr){
-return 0;
+	acquire(&shmtable.lock);
+	int k;
+	int shmid;
+	struct proc *p = myproc();
+	char* v_addr = (char*)0;
+	for(k = 0; k < 32; k++){
+		if(p->pages[k].key != -1 && p->pages[k].v_addr == (char*)shmaddr){
+			v_addr = p -> pages[k].v_addr;
+			shmid = p -> pages[k].shmid;
+			break;
+		}
+	}
+
+	if(v_addr){
+		p->pages[k].shmid = -1;
+		p->pages[k].no_of_pages = 0;
+		p->pages[k].key = -1;
+		p->pages[k].v_addr = (char*)0;
+		p->pages[k].permission = PTE_W | PTE_U;
+		if(shmtable.pages[shmid].number_of_attaches > 1){
+			shmtable.pages[shmid].number_of_attaches--;
+			shmtable.pages[shmid].shm_lpid = p->pid;
+			release(&shmtable.lock);
+			return 0;
+		}
+		else{
+			for(int j = 0; j < shmtable.pages[k].no_of_pages; j++){
+				char *a = (char*)P2V(shmtable.pages[k].phy_addr[j]);
+				kfree(a);
+				shmtable.pages[k].phy_addr[j] = (char*)0;
+			}
+			shmtable.pages[k].key = -1;
+			shmtable.pages[k].no_of_pages = 0;
+			shmtable.pages[k].shmid = -1;
+			shmtable.pages[k].permission = -1;
+			shmtable.pages[k].size = 0;
+			shmtable.pages[k].shm_lpid = -1;
+			shmtable.pages[k].shm_cpid = -1;
+			shmtable.pages[k].number_of_attaches = 0;
+			release(&shmtable.lock);
+			return 0;
+		}
+	}
+	else{
+		release(&shmtable.lock);
+		return -1;
+	}
 }
 //shmat
 //we get shmid from shmget
