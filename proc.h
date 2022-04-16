@@ -39,7 +39,7 @@ typedef struct sharedpages{
 	int no_of_pages;
 	int shmid;
 	int permission;
-	char *v_addr;
+	void *v_addr;
 }sharedpages;
 
 // Per-process state

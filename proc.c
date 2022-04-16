@@ -117,7 +117,7 @@ found:
 	p->pages[j].no_of_pages  = 0;
 	p->pages[j].shmid = -1;
 	p->pages[j].permission = PTE_W | PTE_U;
-	p->pages[j].v_addr = (char*)0;
+	p->pages[j].v_addr = (void*)0;
   }
 
   return p;
