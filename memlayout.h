@@ -15,4 +15,4 @@
 #define P2V_WO(x) ((x) + KERNBASE)    // same as P2V, but without casts
 //make space for shared memory
 
-#define MAXHEAP 0x7F800000		//8MB from MAXHEAP to KERNBASE
+#define MAXHEAP 0x7FC00000		//4MB from MAXHEAP to KERNBASE

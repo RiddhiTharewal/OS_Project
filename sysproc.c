@@ -107,6 +107,13 @@ int sys_shmget(void){
 	return shmget((int)key,(uint)size,shmflag);
 }
 
+int sys_shmdt(void){
+	int i;
+	if(argint(0,&i)<0)
+		return -1;
+	return shmdt((void*)i);
+}
+
 void* sys_shmat(void){
 	int shmid,shmflag;
 	int i;
@@ -119,10 +126,16 @@ void* sys_shmat(void){
 	return shmat(shmid,(void*)i,shmflag);
 }
 
-int sys_shmctl(void){
-	return 0;
-}
 
-int sys_shmdt(void){
-	return 0;
+
+
+int sys_shmctl(void){
+	int shmid, cmd, buf;
+	if(argint(0, &shmid) < 0)
+		return -1;
+	if(argint(1, &cmd) < 0)
+		return -1;
+	if(argint(2, &buf) < 0)
+		return -1;
+	return shmctl(shmid, cmd, (void*)buf);
 }

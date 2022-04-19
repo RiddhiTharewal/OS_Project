@@ -12,3 +12,7 @@
 #define SHM_REMAP 3000
 #define SHMLBA PGSIZE
 #define SHM_RND 4000
+
+//macros for shmctl
+#define IPC_RMID 04
+#define IPC_SET 05

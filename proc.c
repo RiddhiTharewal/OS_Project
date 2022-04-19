@@ -13,7 +13,6 @@ struct {
 } ptable;
 
 static struct proc *initproc;
-
 int nextpid = 1;
 extern void forkret(void);
 extern void trapret(void);
@@ -247,6 +246,11 @@ exit(void)
     if(curproc->ofile[fd]){
       fileclose(curproc->ofile[fd]);
       curproc->ofile[fd] = 0;
+    }
+  }
+  for(int i = 0; i < 32; i++) {
+    if(curproc->pages[i].shmid != -1 && curproc->pages[i].key != -1) {
+      shmdt(curproc->pages[i].v_addr);
     }
   }
 

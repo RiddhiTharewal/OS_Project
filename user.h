@@ -27,7 +27,7 @@ int uptime(void);
 int shmget(int, uint, int);
 int shmat(int, void*, int);
 int shmdt(void*);
-int shmctl(int, int, int*);
+int shmctl(int, int, void*);
 
 
 // ulib.c

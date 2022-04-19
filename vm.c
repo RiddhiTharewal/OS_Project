@@ -19,6 +19,7 @@ struct shmpage{
 	int key;
 	int no_of_pages;
 	int shmid;
+	int dflag;
 	void *phy_addr[32];
 	int permission;
 	uint size;
@@ -425,6 +426,7 @@ void shminit(void){
 		page->key = -1;
 		page->no_of_pages = 0;
 		page->shmid = 0;
+		page->dflag = 0;
 		for(int i = 0;i<32;i++){
 			page->phy_addr[i] = (void*)0;
 		}
@@ -461,7 +463,6 @@ int check_keystatus(int key,int shmflg,int pages_required){
 				if(shmflg == (IPC_CREAT | IPC_EXCL)){
 					return -1;
 				}
-				//cprintf("%d-%d\n",shmtable.pages[i].no_of_pages,pages_required);
 				if(shmtable.pages[i].no_of_pages != pages_required){
 					return -1;
 				}
@@ -474,7 +475,6 @@ int check_keystatus(int key,int shmflg,int pages_required){
 				return -1;
 			}
 	}
-	//cprintf("something\n");
 	return -2;
 }
 
@@ -517,7 +517,7 @@ int shmget(int key, uint size, int shmflg){
 		release(&shmtable.lock);
 		return -1;
 	}
-	if((key!=IPC_PRIVATE) && (shmflg == IPC_CREAT) && (shmflg != (IPC_CREAT | IPC_EXCL))){
+	if((key!=IPC_PRIVATE) && (shmflg != IPC_CREAT) && (shmflg != (IPC_CREAT | IPC_EXCL))){
 		release(&shmtable.lock);
 		return -1;
 	}
@@ -542,34 +542,26 @@ int shmget(int key, uint size, int shmflg){
 	return i;	//shmid
 }
 
-/*int getindex(struct proc* p, void* cva){
-	void* lva = (void*)(KERNBASE-1);
-	int i;
-	for(i = 0; i < 32; i++){
-		if(p->pages[i].key != -1 && (uint)p->pages[i].v_addr >= (uint)cva && (uint)lva >= (uint)p->pages[i].v_addr) {
-			lva = p->pages[i].v_addr;
-		}
-	}
-	if(i == 32)
-		return -1;
-	return i;
+/*
+shmdt
+detaches the shared memory located  at the address specified by shmaddr
 }*/
 
-int shmdt(const void *shmaddr){
+int shmdt(void *shmaddr){
 	acquire(&shmtable.lock);
 	int k;
 	int shmid,no_of_pages;
 	struct proc *p = myproc();
 	void* v_addr = (void*)0;
+
 	for(k = 0; k < 32; k++){
 		if(p->pages[k].key != -1 && p->pages[k].v_addr == shmaddr){
-			v_addr = p -> pages[k].v_addr;
-			shmid = p -> pages[k].shmid;
+			v_addr = p->pages[k].v_addr;
+			shmid = p->pages[k].shmid;
 			no_of_pages = p->pages[k].no_of_pages;
 			break;
 		}
 	}
-
 	if(v_addr){
 		for(int j = 0;j<no_of_pages;j++){
 			pte_t* pte = walkpgdir(p->pgdir, (void*)((uint)v_addr + j*PGSIZE), 0);
@@ -584,13 +576,10 @@ int shmdt(const void *shmaddr){
 		p->pages[k].key = -1;
 		p->pages[k].v_addr = (void*)0;
 		p->pages[k].permission = PTE_W | PTE_U;
-		if(shmtable.pages[shmid].number_of_attaches > 1){
+		if(shmtable.pages[shmid].number_of_attaches > 0){
 			shmtable.pages[shmid].number_of_attaches--;
-			shmtable.pages[shmid].shm_lpid = p->pid;
-			release(&shmtable.lock);
-			return 0;
 		}
-		else{
+		if(shmtable.pages[shmid].number_of_attaches == 0 && shmtable.pages[shmid].dflag==1){
 			for(int j = 0; j < shmtable.pages[k].no_of_pages; j++){
 				void *a = (void*)P2V(shmtable.pages[k].phy_addr[j]);
 				kfree(a);
@@ -599,6 +588,7 @@ int shmdt(const void *shmaddr){
 			shmtable.pages[k].key = -1;
 			shmtable.pages[k].no_of_pages = 0;
 			shmtable.pages[k].shmid = -1;
+			shmtable.pages[k].dflag = 0;
 			shmtable.pages[k].permission = -1;
 			shmtable.pages[k].size = 0;
 			shmtable.pages[k].shm_lpid = -1;
@@ -607,17 +597,21 @@ int shmdt(const void *shmaddr){
 			release(&shmtable.lock);
 			return 0;
 		}
+		shmtable.pages[shmid].shm_lpid = p->pid;
+		release(&shmtable.lock);
+		return 0;
 	}
 	else{
 		release(&shmtable.lock);
 		return -1;
 	}
 }
-//shmat
-//we get shmid from shmget
-//attaches memory segment identified by shmid to the address space of process
-//shmaddr provides this address:if null suitable unused address attached
-                               //else if null attach occurs to address equal to shmaddr
+/*shmat
+we get shmid from shmget
+attaches memory segment identified by shmid to the address space of process
+shmaddr provides this address:if null suitable unused address attached
+                              else if null attach occurs to address equal to shmaddr
+*/
 void *shmat(int shmid, void *shmaddr, int shmflg){
 	acquire(&shmtable.lock);
 	int k = shmtable.pages[shmid].shmid;
@@ -678,29 +672,15 @@ void *shmat(int shmid, void *shmaddr, int shmflg){
 			break;
 		}
 	}
-
-	uint size = 0;
 	if(index != -1){
 		if(shmflg & SHM_REMAP){
 			uint seg = (uint)process->pages[index].v_addr;
-			while(seg < (uint)va + shmtable.pages[k].no_of_pages*PGSIZE){
-				size = process->pages[index].no_of_pages;
+			if(seg < (uint)va + shmtable.pages[k].no_of_pages*PGSIZE){
+				release(&shmtable.lock);
 				if(shmdt((void*)seg) == -1){
-					release(&shmtable.lock);
 					return (void*)-1;
 				}
-				int j;
-				lva = (void*)(KERNBASE-1);
-				index = -1;
-				for(j = 0; j < 32; j++){
-					if(process->pages[j].key != -1 && (uint)process->pages[j].v_addr >= (uint)(seg+size*PGSIZE) && (uint)lva >= (uint)process->pages[j].v_addr){
-						lva = process->pages[j].v_addr;
-						index = j;
-					}
-				}
-				if(index == -1)
-					break;
-				seg = (uint)process->pages[index].v_addr;
+				acquire(&shmtable.lock);
 			}
 		}
 		else{
@@ -708,7 +688,6 @@ void *shmat(int shmid, void *shmaddr, int shmflg){
 			return (void*)-1;
 		}
 	}
-
 	int pflag;
 	if(((shmflg & SHM_RDONLY)!=0) && (shmtable.pages[k].permission == shm_rd)){
 		pflag = PTE_U;
@@ -722,12 +701,7 @@ void *shmat(int shmid, void *shmaddr, int shmflg){
 	}
 
 	for(int j = 0;j<shmtable.pages[k].no_of_pages;j++){
-		if(mappages(process->pgdir, (void*)((uint)va + (j*PGSIZE)), PGSIZE, (uint)shmtable.pages[k].phy_addr[j], pflag) < 0) {
-			deallocuvm(process->pgdir,(uint)va,(uint)(va + shmtable.pages[k].no_of_pages));
-			cprintf("here");
-			release(&shmtable.lock);
-			return (void*)-1;
-		}
+		mappages(process->pgdir, (void*)((uint)va + (j*PGSIZE)), PGSIZE, (uint)shmtable.pages[k].phy_addr[j], pflag);
 	}
 
 	index = -1;
@@ -753,18 +727,59 @@ void *shmat(int shmid, void *shmaddr, int shmflg){
 	release(&shmtable.lock);
 	return va;
 }
-/*
-//shmdt
-//detaches the shared memory located  at the address specified by shmaddr
-int shmdt(const void *shmaddr){
-return 0;
+
+
+/*shmctl
+controls the shared memory region corresponding to shmid
+cmd: IPC_SET, IPC_RMID
+IPC_RMID: destroy segment only after last process detaches it
+*/
+
+int shmctl(int shmid, int cmd, void *buf){
+	acquire(&shmtable.lock);
+	if(shmid<0 || shmid>32){
+		return -1;
+	}
+	int i = shmtable.pages[shmid].shmid;
+	cprintf("\n%d\n",i);
+
+	if(i != -1){
+
+		if((cmd == IPC_SET) && buf && (((int)buf == shm_rd) || ((int)buf == shm_rdwr))){
+			shmtable.pages[i].permission = (int)buf;
+			release(&shmtable.lock);
+			return 0;
+		}
+		else if(cmd == IPC_RMID){
+			if(shmtable.pages[i].number_of_attaches == 0 ){
+				for(int j = 0; j < shmtable.pages[i].no_of_pages; j++){
+					void* free_addr = (void*)P2V(shmtable.pages[i].phy_addr[j]);
+					kfree(free_addr);
+					shmtable.pages[i].phy_addr[j] = (void*)0;
+				}
+				shmtable.pages[i].no_of_pages = 0;
+				shmtable.pages[i].key = -1;
+				shmtable.pages[i].shmid = -1;
+				shmtable.pages[i].dflag = 0;
+				shmtable.pages[i].permission = 0;
+				shmtable.pages[i].size = 0;
+				shmtable.pages[i].shm_lpid = -1;
+				shmtable.pages[i].shm_cpid = -1;
+				shmtable.pages[i].number_of_attaches = 0;
+				release(&shmtable.lock);
+				return 0;
+			}
+			else{
+				shmtable.pages[i].dflag = 1;
+				release(&shmtable.lock);
+				return 0;
+			}
+		}
+		else{
+			release(&shmtable.lock);
+			return 0;
+		}
+	}
+	release(&shmtable.lock);
+	return -1;
 }
-
-//shmctl
-//controls the shared memory region corresponding to shmid
-//cmd: IPC_STAT, IPC_SET, IPC_RMID
-//IPC_RMID: destroy segment only after last process detaches it
-int shmctl(int shmid, int cmd, struct shmid_ds *buf){
-return 0;
-}*/
-
