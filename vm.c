@@ -425,7 +425,7 @@ void shminit(void){
 	for(page= shmtable.pages;page<&shmtable.pages[32];page++){
 		page->key = -1;
 		page->no_of_pages = 0;
-		page->shmid = 0;
+		page->shmid = -1;
 		page->dflag = 0;
 		for(int i = 0;i<32;i++){
 			page->phy_addr[i] = (void*)0;
@@ -456,7 +456,7 @@ void shminit(void){
 
 //key is used as identifier
 
-
+//check if key is present in shmtable and return shmid according to condition
 int check_keystatus(int key,int shmflg,int pages_required){
 	for(int i = 0; i<32 ; i++){
 			if(shmtable.pages[i].key == key){
@@ -614,8 +614,12 @@ shmaddr provides this address:if null suitable unused address attached
 */
 void *shmat(int shmid, void *shmaddr, int shmflg){
 	acquire(&shmtable.lock);
+	if((shmid < 0 || shmid>32)){
+		release(&shmtable.lock);
+		return (void*)-1;
+	}
 	int k = shmtable.pages[shmid].shmid;
-	if((shmid < 0 || shmid>32) || (k == -1)){
+	if(k==-1){
 		release(&shmtable.lock);
 		return (void*)-1;
 	}

@@ -43,6 +43,6 @@ int main(int argc,char *argv[]){
 		printf(1,"Second shmdt failed");
 		exit();
 	}
-	printf(1,"\nBasic read write passed");
+	printf(1,"\nBasic Test of shmget, shmat, shmdt passed");
 	exit();	
 }
