@@ -745,7 +745,6 @@ int shmctl(int shmid, int cmd, void *buf){
 		return -1;
 	}
 	int i = shmtable.pages[shmid].shmid;
-	cprintf("\n%d\n",i);
 
 	if(i != -1){
 
