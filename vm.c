@@ -554,11 +554,13 @@ int shmdt(void *shmaddr){
 
 	for(k = 0; k < 32; k++){
 		if(p->pages[k].key != -1 && p->pages[k].v_addr == shmaddr){
-			v_addr = p->pages[k].v_addr;
-			shmid = p->pages[k].shmid;
-			no_of_pages = p->pages[k].no_of_pages;
 			break;
 		}
+	}
+	if(k!=32){
+		v_addr = p->pages[k].v_addr;
+		shmid = p->pages[k].shmid;
+		no_of_pages = p->pages[k].no_of_pages;
 	}
 	if(v_addr){
 		for(int j = 0;j<no_of_pages;j++){
