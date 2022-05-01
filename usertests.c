@@ -61,7 +61,7 @@ void test_read_and_write(){
 		printf(1,"shmctl failed\n");
 		exit();
 	}
-	printf(1,"Passed\n\n");
+	printf(1,"passed\n");
 }
 
 void shmget_test(){
