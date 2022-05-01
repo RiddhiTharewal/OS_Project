@@ -15,6 +15,8 @@ pde_t *kpgdir;  // for use in scheduler()
 
 
 //shared memory Structures
+
+//creating a structure of shared memory region which contains: key,shmid,size,address,etc
 struct shmpage{
 	int key;
 	int no_of_pages;
@@ -27,6 +29,8 @@ struct shmpage{
 	int shm_lpid;
 	int number_of_attaches;
 };
+
+//create a structure of shared memory table array of shared memory regions
 
 struct shmtable{
 	struct spinlock lock;
@@ -443,12 +447,6 @@ void shminit(void){
 
 
 //Shared Memory functions
-
-//creating a structure of shared memory region which contains: key,shmid,size,address,etc
-
-//create a structure of shared memory table array of shared memory regions
-
-
 
 //shmget
 //Flags:IPC_CREAT creates a new segment of the given size which is rounded off to a multiple of page size and assigns a key to the segment which can used later as a identifier.
